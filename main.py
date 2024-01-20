@@ -444,13 +444,13 @@ class UE:
                     task_execution_delay = task.get_task_cpu_cycles() / self.processing_capability
                     # print(task.get_deadline())
                     if (task_execution_delay + env.now) > task.get_deadline():
-                        task_execution_delay = task_execution_delay * 2
+                        task_execution_delay = task_execution_delay * 5
                         # print(" delayed task expected")
                 else:  # execution delay on the MEC server
                     task_execution_delay = (task.get_input_size() / BANDWIDTH) + task.get_task_cpu_cycles() / \
                                            SERVER_PROCESSING_CAPABILITIES
                     if (task_execution_delay + env.now) > task.get_deadline():
-                        task_execution_delay = task_execution_delay * 2
+                        task_execution_delay = task_execution_delay * 5
                 solution_execution_delay = solution_execution_delay + task_execution_delay
                 i = i + 1
                 # print("delay:" ,i, " ", task_execution_delay)
