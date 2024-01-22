@@ -1,8 +1,8 @@
 import simpy
 import numpy as np
 from mealpy.physics_based import MVO, SA
+from mealpy.swarm_based import WOA
 from scipy.stats import expon
-import matplotlib.pyplot as plt
 import random
 from mealpy import TransferBinaryVar, TWO, EO, CircleSA
 import pandas as pd
@@ -46,7 +46,7 @@ Future Considerations:
 *******************************************
  Evaluation Metrics:
  - Input size effect on offloading decision 
- -
+ - Evaluate under burst traffic
 '''
 
 
@@ -156,6 +156,9 @@ class ES:
     def get_total_tasks_executed(self):
         return self.total_tasks_executed
 
+    def get_avg_queueing_delay(self):
+        return sum(self.total_queuing_delays)/len(self.total_queuing_delays)
+
     def status(self):
         print("Statistics")
         print("------------------------------------")
@@ -208,10 +211,10 @@ class UE:
 
     def print_stat(self):
         self.calculate_avg_delay_post_deadline()
-        print("EU ", self.name, "executed ", str(self.locally_executed_subtasks))
-        print("server executed : ", self.get_offloaded_task_counter())
+        print(" EU ", self.name, "executed ", str(self.locally_executed_subtasks))
+        print(" server executed : ", self.get_offloaded_task_counter())
         print(f' Queued events:  {len(self.processor.put_queue)}')
-        print(f' Total Energy Consumption: {self.sum_total_energy_consumption()}')
+        print(f' Total Energy Consumption: {self.get_total_energy_consumption()}')
         print(f' Average delay post deadline: {self.avg_delay_post_deadline}')
         print(f' Qualified tasks ratio: {self.qualified_tasks_ratio}')
         print("----------------------------------------------------------")
@@ -239,7 +242,7 @@ class UE:
         self.calculate_avg_delay_post_deadline()
         return self.qualified_tasks_ratio
 
-    def sum_total_energy_consumption(self):
+    def get_total_energy_consumption(self):
         energy_consumption = 0
         for point in self.total_energy_consumption:
             energy_consumption = energy_consumption + point[1]
@@ -305,21 +308,17 @@ class UE:
 
     def generate_offloaded_tasks(self, task):
         start_waiting = env.now
-        # transmit the data
-        # print("before transmission:", task.get_deadline() - env.now)
         transmission_time = task.get_input_size() / BANDWIDTH
-        yield env.timeout(transmission_time)
+        yield env.timeout(transmission_time)  # transmit data
         priority = task.get_deadline() - env.now
         task.set_priority(priority)
-        # print("p after transmission ", priority)
-        # es1.optimized_execution()
-        print("server queue: ", len(es1.processor.put_queue))
+        # print("server queue: ", len(es1.processor.put_queue))
         with es1.processor.request(priority=priority) as req:
             req.obj = task
             task_processing_time = req.obj.get_task_cpu_cycles() / SERVER_PROCESSING_CAPABILITIES
             end_waiting = env.now
             waiting_time = end_waiting - start_waiting
-            self.offloading_execution_delays.append(waiting_time)  # update delays total delays and offloading
+            es1.total_queuing_delays.append(waiting_time)  # update delays total delays and offloading
             yield env.timeout(task_processing_time)
             self.total_execution_delays.append((env.now, task.deadline, env.now - task.deadline))
             self.update_offloaded_tasks_counter()  # update offloaded task counter
@@ -351,9 +350,8 @@ class UE:
 
     def offload_tasks(self, tasks):
         """
-        This method should be updated such that the server handles the execution and update these info
-        :param tasks:
-        :return:
+        This method generates an offloading process per task in the list
+        :param tasks: list of tasks to offload
         """
         for task in tasks:
             env.process(self.generate_offloaded_tasks(task))
@@ -439,18 +437,21 @@ class UE:
         def delay(solution_array):
             solution_execution_delay = 0
             i = 0
+
             for task in self.current_application_tasks_list:
                 if solution_array[i] == 0:  # local execution
                     task_execution_delay = task.get_task_cpu_cycles() / self.processing_capability
                     # print(task.get_deadline())
                     if (task_execution_delay + env.now) > task.get_deadline():
-                        task_execution_delay = task_execution_delay * 5
+                        task_execution_delay = task_execution_delay * 2
                         # print(" delayed task expected")
+
                 else:  # execution delay on the MEC server
                     task_execution_delay = (task.get_input_size() / BANDWIDTH) + task.get_task_cpu_cycles() / \
                                            SERVER_PROCESSING_CAPABILITIES
                     if (task_execution_delay + env.now) > task.get_deadline():
-                        task_execution_delay = task_execution_delay * 5
+                        task_execution_delay = task_execution_delay * 2
+
                 solution_execution_delay = solution_execution_delay + task_execution_delay
                 i = i + 1
                 # print("delay:" ,i, " ", task_execution_delay)
@@ -478,8 +479,9 @@ class UE:
         }
 
         # model = CircleSA.OriginalCircleSA(epoch=60, pop_size=50, c_factor=0.8) # this one doing good
-        # model = EO.AdaptiveEO(epoch=50, pop_size=50)
-        model = TWO.OriginalTWO(epoch=40, pop_size=35)
+        # model = EO.AdaptiveEO(epoch=35, pop_size=50)
+        # model = TWO.OriginalTWO(epoch=40, pop_size=35)
+        model = WOA.HI_WOA(epoch=35, pop_size=35, feedback_max=10)
         g_best = model.solve(problem_multi)
         # print("-------------------------------------------------")
         # print(f"Best Solution: {g_best.solution}, Fitness: {g_best.target.fitness}")
@@ -522,21 +524,25 @@ es1 = ES(SERVER_PROCESSING_CAPABILITIES)
 if __name__ == '__main__':
 
     es1.set_position(0.5, 0.5)
-    users_list = generate_ue(num_of_users=40)
+    users_list = generate_ue(num_of_users=20)
     processes_list = list()
     for user in users_list:
         p = env.process(user.generate_ue_tasks())
         processes_list.append(p)
     post_exec_avg = 0
     qualified_avg = 0
+    avg_energy_consumption = 0
     env.run(until=SIM_TIME)
     for user in users_list:
         user.print_stat()
         user.export_ue_stat()
         post_exec_avg = post_exec_avg + user.get_avg_delay_post_deadline()
         qualified_avg = qualified_avg + user.get_qualified_tasks()
+        avg_energy_consumption = avg_energy_consumption + user.get_total_energy_consumption()
 
     print("**************")
-    print("avg qualified: \n", qualified_avg / len(users_list))
-    print("avg delay: \n", post_exec_avg / len(users_list))
+    print("avg qualified requests for all users: \n", qualified_avg / len(users_list))
+    print("avg delay post deadline line for all users: \n", post_exec_avg / len(users_list))
+    print("avg energy consumption for all users: \n", avg_energy_consumption / len(users_list))
+    print("avg server queueing delay for all tasks: \n", es1.get_avg_queueing_delay())
 
