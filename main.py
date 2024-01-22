@@ -7,7 +7,7 @@ import random
 from mealpy import TransferBinaryVar, TWO, EO, CircleSA
 import pandas as pd
 
-# this run started at 13:20
+#1239
 SIM_TIME = 100
 SERVER_PROCESSING_CAPABILITIES = 15  # in GHZ= billion clock cycle per second
 BANDWIDTH = 0.1  # in Gbps
@@ -524,7 +524,7 @@ es1 = ES(SERVER_PROCESSING_CAPABILITIES)
 if __name__ == '__main__':
 
     es1.set_position(0.5, 0.5)
-    users_list = generate_ue(num_of_users=20)
+    users_list = generate_ue(num_of_users=50)
     processes_list = list()
     for user in users_list:
         p = env.process(user.generate_ue_tasks())
@@ -545,4 +545,4 @@ if __name__ == '__main__':
     print("avg delay post deadline line for all users: \n", post_exec_avg / len(users_list))
     print("avg energy consumption for all users: \n", avg_energy_consumption / len(users_list))
     print("avg server queueing delay for all tasks: \n", es1.get_avg_queueing_delay())
-
+    # 1130
