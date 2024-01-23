@@ -7,8 +7,8 @@ import random
 from mealpy import TransferBinaryVar, TWO, EO, CircleSA
 import pandas as pd
 
-#1239
-SIM_TIME = 100
+# 1239
+SIM_TIME = 400
 SERVER_PROCESSING_CAPABILITIES = 15  # in GHZ= billion clock cycle per second
 BANDWIDTH = 0.1  # in Gbps
 env = simpy.Environment()
@@ -75,14 +75,18 @@ class Task:
             self.deadline = env.now + random.uniform(0.01, 0.3)
             self.input_size = random.uniform(0.01, 0.1)
             self.CPU_cycles = random.uniform(0.15, 3)
-            # print(self.deadline, self.get_input_size(), self.get_task_cpu_cycles())
             sanity_check = self.task_sanity_check(ue_capability)
-            # print("task sanity", sanity_check)
 
     def get_deadline(self):
         return self.deadline
 
     def task_sanity_check(self, ue_capability):
+        """
+        This method checks the feasibility of the randomly generated task. The task must be feasible for either local
+        execution or remote execution
+        :param ue_capability: the processing capability of the edge server
+        :return: boolean
+        """
         local_exec_deadline = env.now + (self.get_task_cpu_cycles() / ue_capability)
         offloading_exec_delay = env.now + (self.get_task_cpu_cycles() / SERVER_PROCESSING_CAPABILITIES) + \
                                 (self.get_input_size() / BANDWIDTH)
@@ -157,7 +161,7 @@ class ES:
         return self.total_tasks_executed
 
     def get_avg_queueing_delay(self):
-        return sum(self.total_queuing_delays)/len(self.total_queuing_delays)
+        return sum(self.total_queuing_delays) / len(self.total_queuing_delays)
 
     def status(self):
         print("Statistics")
@@ -370,7 +374,6 @@ class UE:
 
             self.update_generated_tasks(number_of_subtasks)
             for i in range(number_of_subtasks):
-
                 task = Task()
                 task.create_task(
                     self.processing_capability)  # This method sets the required CPU
@@ -479,9 +482,9 @@ class UE:
         }
 
         # model = CircleSA.OriginalCircleSA(epoch=60, pop_size=50, c_factor=0.8) # this one doing good
-        # model = EO.AdaptiveEO(epoch=35, pop_size=50)
-        # model = TWO.OriginalTWO(epoch=40, pop_size=35)
-        model = WOA.HI_WOA(epoch=35, pop_size=35, feedback_max=10)
+        # model = EO.AdaptiveEO(epoch=35, pop_size=35)
+        model = TWO.OriginalTWO(epoch=35, pop_size=35)
+        # model = WOA.HI_WOA(epoch=35, pop_size=35, feedback_max=10)
         g_best = model.solve(problem_multi)
         # print("-------------------------------------------------")
         # print(f"Best Solution: {g_best.solution}, Fitness: {g_best.target.fitness}")
@@ -545,4 +548,4 @@ if __name__ == '__main__':
     print("avg delay post deadline line for all users: \n", post_exec_avg / len(users_list))
     print("avg energy consumption for all users: \n", avg_energy_consumption / len(users_list))
     print("avg server queueing delay for all tasks: \n", es1.get_avg_queueing_delay())
-    # 1130
+    # 12:20
