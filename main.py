@@ -1,18 +1,17 @@
 import simpy
 import numpy as np
-from mealpy.physics_based import MVO, SA
 from mealpy.swarm_based import WOA
 from scipy.stats import expon
 import random
 from mealpy import TransferBinaryVar, TWO, EO, CircleSA
 import pandas as pd
 
-# 1239
-SIM_TIME = 400
+SIM_TIME = 500
 SERVER_PROCESSING_CAPABILITIES = 15  # in GHZ= billion clock cycle per second
 BANDWIDTH = 0.1  # in Gbps
 env = simpy.Environment()
 EXECUTION_MODE = 2  # 0: All local execution, 1: all offloading, 2:optimized
+ALG = "AEO"  # TWO, HI_WOA AEO
 
 '''
 Problem:
@@ -150,10 +149,6 @@ class ES:
         self.x_pos = x
         self.y_pos = y
 
-    def get_avg_delay_q(self):
-        avg_sum = sum(self.total_delays)
-        return avg_sum / len(self.total_delays)
-
     def update_executed_tasks(self):
         self.total_tasks_executed = self.total_tasks_executed + 1
 
@@ -161,14 +156,16 @@ class ES:
         return self.total_tasks_executed
 
     def get_avg_queueing_delay(self):
-        return sum(self.total_queuing_delays) / len(self.total_queuing_delays)
+        if len(self.total_queuing_delays) > 0:
+            return sum(self.total_queuing_delays) / len(self.total_queuing_delays)
+        else:
+            return 0
 
     def status(self):
         print("Statistics")
         print("------------------------------------")
         print(f' Queued events:  {len(self.processor.put_queue)}')
         print(f' Total served tasks: {self.total_tasks_executed}')
-        print(f' Average delay: {self.get_avg_delay_q()}')
 
 
 class UE:
@@ -354,7 +351,7 @@ class UE:
 
     def offload_tasks(self, tasks):
         """
-        This method generates an offloading process per task in the list
+        This method generates an offloading process per task in the list.
         :param tasks: list of tasks to offload
         """
         for task in tasks:
@@ -480,14 +477,17 @@ class UE:
             "obj_weights": [1, 1],  # Define it or default value will be [1, 1, 1]
             "log_to": 'log.txt'
         }
+        if ALG == "HI_WOA":
+            model = WOA.HI_WOA(epoch=35, pop_size=35, feedback_max=10)
+        elif ALG == "TWO":
+            model = TWO.OriginalTWO(epoch=35, pop_size=35)
+        elif ALG == "AEO":
+            model = EO.AdaptiveEO(epoch=35, pop_size=35)
+        else:
+            model = CircleSA.OriginalCircleSA(epoch=60, pop_size=50, c_factor=0.8)  # this one doing good
 
-        # model = CircleSA.OriginalCircleSA(epoch=60, pop_size=50, c_factor=0.8) # this one doing good
-        # model = EO.AdaptiveEO(epoch=35, pop_size=35)
-        model = TWO.OriginalTWO(epoch=35, pop_size=35)
-        # model = WOA.HI_WOA(epoch=35, pop_size=35, feedback_max=10)
         g_best = model.solve(problem_multi)
-        # print("-------------------------------------------------")
-        # print(f"Best Solution: {g_best.solution}, Fitness: {g_best.target.fitness}")
+
         return g_best.solution
 
 
@@ -525,9 +525,9 @@ es1 = ES(SERVER_PROCESSING_CAPABILITIES)
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-
+    users = 50
     es1.set_position(0.5, 0.5)
-    users_list = generate_ue(num_of_users=50)
+    users_list = generate_ue(num_of_users=users)
     processes_list = list()
     for user in users_list:
         p = env.process(user.generate_ue_tasks())
@@ -544,8 +544,8 @@ if __name__ == '__main__':
         avg_energy_consumption = avg_energy_consumption + user.get_total_energy_consumption()
 
     print("**************")
+    print(" SIM TIME: ", SIM_TIME, " Users: ", users, "  ALG: ", ALG)
     print("avg qualified requests for all users: \n", qualified_avg / len(users_list))
     print("avg delay post deadline line for all users: \n", post_exec_avg / len(users_list))
     print("avg energy consumption for all users: \n", avg_energy_consumption / len(users_list))
     print("avg server queueing delay for all tasks: \n", es1.get_avg_queueing_delay())
-    # 12:20
